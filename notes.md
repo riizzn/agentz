@@ -74,7 +74,17 @@ type Employee = z.infer<typeof EmployeeSchema>;
 
 ## LangGraph is a state machine — it moves between steps (called nodes).
 
-## User messages (HumanMessage)
-## AI replies (AIMessage)
-## Tool results (ToolMessage)
+### User messages (HumanMessage)
+### AI replies (AIMessage)
+### Tool results (ToolMessage)
+
+```powershell
+$body = @{
+    message = "Build a team to make an iOS app, and tell me the talent gaps"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:3000/chat" `
+                  -Method Post `
+                  -ContentType "application/json" `
+                  -Body $body
 
