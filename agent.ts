@@ -63,12 +63,40 @@ export async function callAgent(
       }),
     }
   );
-  const tools = [employeeLookupTool];
+  const bestEmployeeTool = tool(async () => {
+    console.log("best employee tool is called");
+    const pipleline = [
+      { $unwind: "$performance_reviews" },
+      {
+        $group: {
+          _id: "$employee_id",
+          first_name: { $first: "$first_name" },
+          last_name: { $first: "$last_name" },
+          avgRating: { $avg: "$performance_reviews.rating" },
+        },
+      },
+      { $sort: { avgRating: -1 } },
+      { $limit: 1 },
+      
+    ];
+    const [best] = await collection.aggregate(pipleline).toArray();
+    return JSON.stringify(best);
+    
+
+  },
+  {
+    name:"best_employee",
+    description: "Finds the best employee so far based on performance review ratings.",
+    schema: z.object({}),
+
+  }
+);
+  const tools = [employeeLookupTool,bestEmployeeTool];
   const toolNode = new ToolNode<typeof GraphState.State>(tools);
   const llm = new ChatGoogleGenerativeAI({
     apiKey: process.env.GOOGLE_API_KEY as string,
     model: "gemini-1.5-flash",
-    temperature: 0,
+    temperature: 0.9,
   }).bindTools(tools);
 
   async function callModel(state: typeof GraphState.State) {
