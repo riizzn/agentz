@@ -63,35 +63,70 @@ export async function callAgent(
       }),
     }
   );
-  const bestEmployeeTool = tool(async () => {
-    console.log("best employee tool is called");
-    const pipleline = [
-      { $unwind: "$performance_reviews" },
-      {
-        $group: {
-          _id: "$employee_id",
-          first_name: { $first: "$first_name" },
-          last_name: { $first: "$last_name" },
-          avgRating: { $avg: "$performance_reviews.rating" },
+  const bestEmployeeTool = tool(
+    async () => {
+      console.log("best employee tool is called");
+      const pipleline = [
+        { $unwind: "$performance_reviews" },
+        {
+          $group: {
+            _id: "$employee_id",
+            first_name: { $first: "$first_name" },
+            last_name: { $first: "$last_name" },
+            avgRating: { $avg: "$performance_reviews.rating" },
+          },
         },
-      },
-      { $sort: { avgRating: -1 } },
-      { $limit: 1 },
-      
-    ];
-    const [best] = await collection.aggregate(pipleline).toArray();
-    return JSON.stringify(best);
-    
+        { $sort: { avgRating: -1 } },
+        { $limit: 1 },
+      ];
+      const [best] = await collection.aggregate(pipleline).toArray();
+      return JSON.stringify(best);
+    },
+    {
+      name: "best_employee",
+      description:
+        "Finds the best employee so far based on performance review ratings.",
+      schema: z.object({}),
+    }
+  );
 
-  },
-  {
-    name:"best_employee",
-    description: "Finds the best employee so far based on performance review ratings.",
-    schema: z.object({}),
+  const skill_gap_analysis = tool(
+    async ({ requiredSkills }) => {
+      console.log("Skill gap analysis tool called");
 
-  }
-);
-  const tools = [employeeLookupTool,bestEmployeeTool];
+      const skills = await collection
+        .aggregate([
+          { $unwind: "$skills" },
+          { $group: { _id: null, allSkills: { $addToSet: "$skills" } } },
+          { $project: { _id: 0, allSkills: 1 } },
+        ])
+        .toArray();
+      const employeeSkills = skills[0]?.allSkills || [];
+      const covered = requiredSkills.filter((s: string) =>
+        employeeSkills.includes(s)
+      );
+      const missing = requiredSkills.filter(
+        (s: string) => !employeeSkills.includes(s)
+      );
+
+      return JSON.stringify({
+        covered_skills: covered,
+        missing_skills: missing,
+      });
+    },
+    {
+      name: "skill_gap_analysis",
+      description:
+        "Check the required skills for a given role or project.Compare them with the skills of employees already in the company",
+      schema: z.object({
+        requiredSkills: z
+          .array(z.string())
+          .describe("List of required skills for the role or project"),
+      }),
+    }
+  );
+
+  const tools = [employeeLookupTool, bestEmployeeTool, skill_gap_analysis];
   const toolNode = new ToolNode<typeof GraphState.State>(tools);
   const llm = new ChatGoogleGenerativeAI({
     apiKey: process.env.GOOGLE_API_KEY as string,
@@ -107,9 +142,13 @@ export async function callAgent(
        Use the provided tools to progress towards answering the question.
        If you are unable to fully answer, that's OK — another assistant will take over.
        Do what you can to make progress.
+       If the user provides a project description (like "Build an iOS app team"), 
+       you MUST first generate a list of required skills as an array. 
+       Do not ask the user for these skills. 
+       Then call the skill_gap_analysis tool with that array.
        If you or any assistant has the final answer, prefix it with:
        FINAL ANSWER so the team knows to stop.
-
+      
        You have access to these tools: {tool_names}.
        {system_message}
        Current time: {time}.`,
