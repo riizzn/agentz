@@ -87,4 +87,8 @@ Invoke-RestMethod -Uri "http://localhost:3000/chat" `
                   -Method Post `
                   -ContentType "application/json" `
                   -Body $body
+```
 
+* PowerShell → You manually build `JSON (ConvertTo-Json)`.
+
+* React/JS → fetch with `JSON.stringify()` does that for you.
